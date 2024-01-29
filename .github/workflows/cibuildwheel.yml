@@ -32,11 +32,10 @@ on:
       - pyproject.toml
 
 concurrency:
-   group: ${{ github.ref }}-${{ github.workflow }}-${{ github.event_name }}
-   cancel-in-progress: true
+  group: ${{ github.ref }}-${{ github.workflow }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 jobs:
-
   configure_matrix:
     runs-on: ubuntu-latest
     env:
@@ -45,22 +44,22 @@ jobs:
       MATRIX_PULL_REQUEST: |
         {
           "include": [
-            {"os": "ubuntu-latest", "CIBW_BUILD": "cp37-manylinux_*", "CIBW_ARCHS": "x86_64"},
-            {"os": "ubuntu-latest", "CIBW_BUILD": "cp37-musllinux_*", "CIBW_ARCHS": "x86_64"},
-            {"os": "macos-12", "CIBW_BUILD": "cp37-*", "CIBW_ARCHS": "x86_64"},
-            {"os": "windows-2022", "CIBW_BUILD": "cp37-*", "CIBW_ARCHS": "AMD64"}
+            {"os": "ubuntu-latest", "CIBW_BUILD": "cp37-manylinux_*", "CIBW_ARCHS": "x86_64", "id", "1"},
+            {"os": "ubuntu-latest", "CIBW_BUILD": "cp37-musllinux_*", "CIBW_ARCHS": "x86_64" "id", "2"},
+            {"os": "macos-12", "CIBW_BUILD": "cp37-*", "CIBW_ARCHS": "x86_64" "id", "3"},
+            {"os": "windows-2022", "CIBW_BUILD": "cp37-*", "CIBW_ARCHS": "AMD64" "id", "4"}
           ]
         }
       MATRIX_WORKFLOW_DISPATCH: |
         {
           "include": [
-            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-manylinux_*", "CIBW_ARCHS": "x86_64"},
-            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-manylinux_*", "CIBW_ARCHS": "aarch64"},
-            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-musllinux_*", "CIBW_ARCHS": "x86_64"},
-            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-musllinux_*", "CIBW_ARCHS": "aarch64"},
-            {"os": "macos-12", "CIBW_BUILD": "cp*", "CIBW_ARCHS": "x86_64"},
-            {"os": "windows-2022", "CIBW_BUILD": "cp*", "CIBW_ARCHS": "x86"},
-            {"os": "windows-2022", "CIBW_BUILD": "cp*", "CIBW_ARCHS": "AMD64"}
+            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-manylinux_*", "CIBW_ARCHS": "x86_64", "id", "1"},
+            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-manylinux_*", "CIBW_ARCHS": "aarch64", "id", "2"},
+            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-musllinux_*", "CIBW_ARCHS": "x86_64", "id", "3"},
+            {"os": "ubuntu-latest", "CIBW_BUILD": "cp*-musllinux_*", "CIBW_ARCHS": "aarch64", "id", "4"},
+            {"os": "macos-12", "CIBW_BUILD": "cp*", "CIBW_ARCHS": "x86_64", "id", "5"},
+            {"os": "windows-2022", "CIBW_BUILD": "cp*", "CIBW_ARCHS": "x86", "id", "6"},
+            {"os": "windows-2022", "CIBW_BUILD": "cp*", "CIBW_ARCHS": "AMD64", "id", "7"}
           ]
         }
 
@@ -68,13 +67,13 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
 
     steps:
-    - id: set-matrix
-      run: |
-        if [ $GITHUB_EVENT_NAME == "pull_request" ]; then
-          echo "matrix=$(echo $MATRIX_PULL_REQUEST | jq -c)" >> "$GITHUB_OUTPUT"
-        else
-          echo "matrix=$(echo $MATRIX_WORKFLOW_DISPATCH | jq -c)" >> "$GITHUB_OUTPUT"
-        fi
+      - id: set-matrix
+        run: |
+          if [ $GITHUB_EVENT_NAME == "pull_request" ]; then
+            echo "matrix=$(echo $MATRIX_PULL_REQUEST | jq -c)" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=$(echo $MATRIX_WORKFLOW_DISPATCH | jq -c)" >> "$GITHUB_OUTPUT"
+          fi
 
   build_wheels:
     needs: configure_matrix
@@ -91,26 +90,26 @@ jobs:
       CIBW_TEST_SKIP: "*-win32"
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-    - uses: actions/cache@v4
-      id: cache-wheel
-      with:
-        path: wheelhouse
-        key: wheel-${{ matrix.CIBW_BUILD }}-${{ matrix.CIBW_ARCHS }}-${{ github.sha }}
+      - uses: actions/cache@v4
+        id: cache-wheel
+        with:
+          path: wheelhouse
+          key: wheel-${{ matrix.CIBW_BUILD }}-${{ matrix.CIBW_ARCHS }}-${{ github.sha }}
 
-    - uses: docker/setup-qemu-action@v3
-      if: steps.cache-wheel.outputs.cache-hit != 'true' && runner.os == 'Linux'
+      - uses: docker/setup-qemu-action@v3
+        if: steps.cache-wheel.outputs.cache-hit != 'true' && runner.os == 'Linux'
 
-    - uses: pypa/cibuildwheel@v2.16.3
-      if: steps.cache-wheel.outputs.cache-hit != 'true'
+      - uses: pypa/cibuildwheel@v2.16.3
+        if: steps.cache-wheel.outputs.cache-hit != 'true'
 
-    - uses: actions/upload-artifact@v4
-      with:
-        path: wheelhouse/*.whl
-        name: wheels
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.id }}
+          path: wheelhouse/*.whl
 
   upload_pypi:
     needs: build_wheels
@@ -118,16 +117,17 @@ jobs:
     if: needs.build_wheels.result == 'success' && github.event.inputs.publish == 'PUBLISH'
 
     steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: wheels
-        path: wheelhouse
+      - uses: actions/download-artifact@v4
+        with:
+          path: wheelhouse
+          pattern: wheels-*
+          merge-multiple: true
 
-    - uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.PYPI_API_TOKEN }}
-        packages_dir: wheelhouse
-        skip_existing: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages_dir: wheelhouse
+          skip_existing: true
 
   upload_pypi_test:
     needs: build_wheels
@@ -135,14 +135,15 @@ jobs:
     if: needs.build_wheels.result == 'success' && github.event.inputs.publish_test == 'PUBLISH_TEST'
 
     steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: wheels
-        path: wheelhouse
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-*
+          path: wheelhouse
+          merge-multiple: true
 
-    - uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        packages_dir: wheelhouse
-        skip_existing: true
-        repository_url: https://test.pypi.org/legacy/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages_dir: wheelhouse
+          skip_existing: true
+          repository_url: https://test.pypi.org/legacy/
